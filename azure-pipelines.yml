@@ -1,0 +1,110 @@
+trigger:
+- main
+
+pool:
+  vmImage: 'ubuntu-latest'
+
+variables:
+  containerRegistry: 'mytetragonregistry.azurecr.io'
+  imageRepository: 'tetragon-demo-app'
+  dockerfilePath: '$(Build.SourcesDirectory)/Dockerfile'
+  tag: '$(Build.BuildId)'
+
+stages:
+- stage: Build
+  displayName: Build and Security Scan
+  jobs:
+  - job: Build
+    displayName: Build Job
+    steps:
+    - task: NodeTool@0
+      inputs:
+        versionSpec: '18.x'
+      displayName: 'Install Node.js'
+
+    - script: |
+        npm install
+        npm run test
+      displayName: 'npm install and test'
+
+    - task: Docker@2
+      displayName: Build and push image
+      inputs:
+        command: buildAndPush
+        repository: $(imageRepository)
+        dockerfile: $(dockerfilePath)
+        containerRegistry: $(containerRegistry)
+        tags: |
+          $(tag)
+          latest
+
+    # Container vulnerability scanning with Trivy
+    - script: |
+        # Install Trivy
+        sudo apt-get update
+        sudo apt-get install wget apt-transport-https gnupg lsb-release
+        wget -qO - https://aquasecurity.github.io/trivy-repo/deb/public.key | sudo apt-key add -
+        echo "deb https://aquasecurity.github.io/trivy-repo/deb $(lsb_release -sc) main" | sudo tee -a /etc/apt/sources.list.d/trivy.list
+        sudo apt-get update
+        sudo apt-get install trivy
+        
+        # Scan the built image
+        trivy image --format json --output trivy-results.json $(containerRegistry)/$(imageRepository):$(tag)
+        trivy image --format table $(containerRegistry)/$(imageRepository):$(tag)
+      displayName: 'Container Vulnerability Scan'
+
+    # Kubernetes manifest security scanning
+    - script: |
+        # Install Kubescape
+        curl -s https://raw.githubusercontent.com/kubescape/kubescape/master/install.sh | /bin/bash
+        
+        # Scan Kubernetes manifests
+        kubescape scan k8s-manifests/ --format json --output kubescape-results.json
+        kubescape scan k8s-manifests/ --format pretty-printer
+      displayName: 'Kubernetes Security Scan'
+
+    - task: PublishBuildArtifacts@1
+      displayName: 'Publish Security Scan Results'
+      inputs:
+        pathToPublish: '.'
+        artifactName: 'security-scan-results'
+
+- stage: Deploy
+  displayName: Deploy to AKS
+  dependsOn: Build
+  condition: succeeded()
+  jobs:
+  - job: Deploy
+    displayName: Deploy Job
+    steps:
+    - task: KubernetesManifest@0
+      displayName: Deploy Application
+      inputs:
+        action: deploy
+        kubernetesServiceConnection: 'aks-connection'
+        manifests: |
+          k8s-manifests/deployment.yaml
+          k8s-manifests/service.yaml
+
+    - task: KubernetesManifest@0
+      displayName: Apply Tetragon Security Policies
+      inputs:
+        action: deploy
+        kubernetesServiceConnection: 'aks-connection'
+        manifests: |
+          security/tetragon-policies.yaml
+
+    # Verify deployment and Tetragon monitoring
+    - script: |
+        # Wait for pods to be ready
+        kubectl wait --for=condition=ready pod -l app=tetragon-demo-app --timeout=300s
+        
+        # Check if Tetragon is monitoring the workload
+        echo "Checking Tetragon monitoring..."
+        kubectl exec -n kube-system deployment/tetragon -- \
+          tetra getevents --output compact --timeout 30s
+        
+        # Test the application
+        kubectl get service tetragon-demo-app-service
+        echo "Application deployed successfully!"
+      displayName: 'Verify Deployment and Security Monitoring'

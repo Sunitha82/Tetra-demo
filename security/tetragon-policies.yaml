@@ -1,0 +1,73 @@
+
+apiVersion: cilium.io/v1alpha1
+kind: TracingPolicy
+metadata:
+  name: demo-app-security-policy
+spec:
+  kprobes:
+  # Monitor process execution
+  - call: "sys_execve"
+    syscall: true
+    args:
+    - index: 0
+      type: "string"
+    - index: 1
+      type: "string"
+    selectors:
+    - matchPIDs:
+      - operator: In
+        followForks: true
+        isNamespacePID: false
+        values:
+        - 0
+      matchActions:
+      - action: Post
+
+  # Monitor file access to sensitive paths
+  - call: "security_file_open"
+    syscall: false
+    args:
+    - index: 0
+      type: "file"
+    selectors:
+    - matchArgs:
+      - index: 0
+        operator: "prefix"
+        values:
+        - "/etc/"
+        - "/root/"
+        - "/var/lib/docker"
+      matchActions:
+      - action: Post
+
+  # Monitor network connections
+  - call: "tcp_connect"
+    syscall: false
+    args:
+    - index: 0
+      type: "sock"
+    selectors:
+    - matchActions:
+      - action: Post
+---
+apiVersion: cilium.io/v1alpha1
+kind: TracingPolicy
+metadata:
+  name: demo-app-runtime-security
+spec:
+  kprobes:
+  # Monitor privilege escalation attempts
+  - call: "cap_capable"
+    syscall: false
+    args:
+    - index: 1
+      type: "int"
+    selectors:
+    - matchArgs:
+      - index: 1
+        operator: "equal"
+        values: 
+        - "21"  # CAP_SYS_ADMIN
+        - "7"   # CAP_SETUID
+      matchActions:
+      - action: Post

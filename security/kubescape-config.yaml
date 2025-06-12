@@ -1,0 +1,46 @@
+# Kubescape configuration for security scanning
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: kubescape-config
+data:
+  config.yaml: |
+    settings:
+      # Set scanning scope
+      scope: "cluster"
+      
+      # Configure output formats
+      output:
+        - "json"
+        - "pretty-printer"
+      
+      # Set severity thresholds
+      severityThreshold: "medium"
+      
+      # Enable specific frameworks
+      frameworks:
+        - "nsa"
+        - "mitre"
+        - "cis-v1.23-t1.0.1"
+      
+      # Configure exceptions (if needed)
+      exceptions:
+        - controlID: "C-0016" # Allow privileged containers for system pods
+          namespaces: ["kube-system"]
+        
+      # Scanning configuration
+      scanningConfig:
+        skipTLSVerify: false
+        timeout: "10m"
+        
+      # Host scanning (if applicable)
+      hostScan:
+        enabled: false
+        
+      # Compliance configuration
+      compliance:
+        frameworks:
+          - name: "nsa"
+            version: "v1.0"
+          - name: "mitre"
+            version: "v1.0"
