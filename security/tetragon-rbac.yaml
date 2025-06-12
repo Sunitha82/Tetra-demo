@@ -1,0 +1,41 @@
+# tetragon-rbac.yaml
+# Create this file: rbac-tetragon-deploy.yaml
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: azure-devops-deploy
+  namespace: default
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: tetragon-policy-manager
+rules:
+# Permissions for TracingPolicy resources
+- apiGroups: ["cilium.io"]
+  resources: ["tracingpolicies"]
+  verbs: ["get", "list", "create", "update", "patch", "delete"]
+# Permissions for standard Kubernetes resources
+- apiGroups: ["apps"]
+  resources: ["deployments", "replicasets"]
+  verbs: ["get", "list", "create", "update", "patch", "delete"]
+- apiGroups: [""]
+  resources: ["services", "configmaps", "secrets", "pods"]
+  verbs: ["get", "list", "create", "update", "patch", "delete"]
+# Permissions to read events and logs
+- apiGroups: [""]
+  resources: ["events", "pods/log"]
+  verbs: ["get", "list"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: azure-devops-tetragon-binding
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: tetragon-policy-manager
+subjects:
+- kind: ServiceAccount
+  name: azure-devops-deploy
+  namespace: default
