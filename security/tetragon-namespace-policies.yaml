@@ -1,0 +1,93 @@
+
+# security/tetragon-namespace-policies.yaml
+# These are namespace-scoped policies that don't require special cluster permissions
+
+apiVersion: cilium.io/v1alpha1
+kind: TracingPolicyNamespaced
+metadata:
+  name: demo-app-file-access
+  namespace: default
+spec:
+  podSelector:
+    matchLabels:
+      app: tetragon-demo-app
+  kprobes:
+  - call: "sys_openat"
+    syscall: true
+    args:
+    - index: 0
+      type: int
+    - index: 1
+      type: "char_buf"
+      sizeArgIndex: 3
+    - index: 2
+      type: "int"
+    selectors:
+    - matchArgs:
+      - index: 1
+        operator: "Prefix"
+        values:
+        - "/etc/"
+        - "/var/"
+        - "/tmp/"
+    returnArg:
+      index: 0
+      type: "int"
+
+---
+apiVersion: cilium.io/v1alpha1
+kind: TracingPolicyNamespaced
+metadata:
+  name: demo-app-process-execution
+  namespace: default
+spec:
+  podSelector:
+    matchLabels:
+      app: tetragon-demo-app
+  kprobes:
+  - call: "sys_execve"
+    syscall: true
+    args:
+    - index: 0
+      type: "char_buf"
+      sizeArgIndex: 1
+    - index: 1
+      type: "char_buf"
+      sizeArgIndex: 2
+    selectors:
+    - matchArgs:
+      - index: 0
+        operator: "Prefix"
+        values:
+        - "/bin/"
+        - "/usr/bin/"
+        - "/sbin/"
+    returnArg:
+      index: 0
+      type: "int"
+
+---
+apiVersion: cilium.io/v1alpha1
+kind: TracingPolicyNamespaced
+metadata:
+  name: demo-app-network-monitoring
+  namespace: default
+spec:
+  podSelector:
+    matchLabels:
+      app: tetragon-demo-app
+  kprobes:
+  - call: "tcp_connect"
+    syscall: false
+    args:
+    - index: 0
+      type: "sock"
+    selectors:
+    - matchArgs:
+      - index: 0
+        operator: "DAddr"
+        values:
+        - "0.0.0.0/0"
+    returnArg:
+      index: 0
+      type: "int"
