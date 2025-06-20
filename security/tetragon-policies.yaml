@@ -32,7 +32,7 @@ spec:
     selectors:
     - matchArgs:
       - index: 0
-        operator: "prefix"
+        operator: "Prefix"
         values:
         - "/etc/"
         - "/root/"
@@ -65,7 +65,7 @@ spec:
     selectors:
     - matchArgs:
       - index: 1
-        operator: "equal"
+        operator: "Equal"
         values: 
         - "21"  # CAP_SYS_ADMIN
         - "7"   # CAP_SETUID
